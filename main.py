@@ -94,8 +94,6 @@ async def latency(ctx):
 
     return await ctx.send(f"**Ping: {ping} ms**")
 
-@news_bot.hybrid_command(name='help')
-
 
 @tasks.loop(seconds=600, reconnect=True)
 async def send_auto_update():
