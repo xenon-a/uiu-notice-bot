@@ -11,6 +11,11 @@ I was inspired to make this discord bot after watching people asking for a disco
 
 <b>[Click-here](https://discord.gg/GvuPg8tgBX)</b> to join the discord server of this bot and get latest updates.
 
+<b>Usage:</b> <br/>
+
+    This bot automatically checks for a new notice in the UIU official website every 10 minutes and sends a notification in the server.
+
+    Also, the '/notices' command can be used in the bot's DM or in the server to get the latest notice manually.
 
 <hr/><hr/>
 
