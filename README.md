@@ -19,6 +19,9 @@ I was inspired to make this discord bot after watching people asking for a disco
 
 <hr/><hr/>
 
+Credit:
+    Thanks to [Refat](https://github.com/RefatHex) brother for the web scraper file.
+
 <i><b>If you have found any bug or if you have any suggestion, feel free to knock me on discord @xenon.py</b></i>
 
 
