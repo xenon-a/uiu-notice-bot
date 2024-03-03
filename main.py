@@ -15,14 +15,14 @@ load_dotenv()
 # constants
 TOKEN = os.environ.get("UNB_TOKEN")
 INTENTS = discord.Intents.all()
-REFRESH_TIME = 600 # 10 minutes
+REFRESH_INTERVAL = 600 #SECONDS
 
-class UIUNoticeBot(commands.Bot):
+class UIUNoticeBot(commands.AutoShardedBot):
     def __init__(self):
         self.start_time = time()
         self.update_channel = None
+        self.owner = None
         self.last_notice_title = None
-
 
         super(UIUNoticeBot, self).__init__(
             command_prefix="-",
@@ -48,9 +48,12 @@ class UIUNoticeBot(commands.Bot):
             return await ctx.send(":x: **Private command!**")
         else:
             await ctx.send(":warning: **An unknown Error has occured! Please wait for the next update for a fix.**")
+            await self.owner.send(f"{err.__class__.__name__}: {str(err)}")
             raise err
 
+
 news_bot = UIUNoticeBot()
+
 
 async def send_notice(date, title, link, context=None):
     context = context or news_bot.update_channel
@@ -59,7 +62,7 @@ async def send_notice(date, title, link, context=None):
     news_bot.last_notice_title = title
     emb = discord.Embed(
         title="New Notice",
-        description=f"Notice date: *{date}*\n\n**{title}**",
+        description=f"**Notice date:** `{date}`\n\n**{title}**\n",
         color=discord.Colour.random(),
         timestamp=discord.utils.utcnow()
     )
@@ -73,10 +76,14 @@ async def send_notice(date, title, link, context=None):
 
     return await context.send(embed=emb, view=view)
 
+
 @news_bot.listen()
 async def on_ready():
     await news_bot.tree.sync()
+    news_bot.owner = await news_bot.fetch_user(425590285943439362)
+    await news_bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="UIU", type=discord.ActivityType.listening))
     print("Logged in as {0.name} | {0.id}".format(news_bot.user))
+
 
 @news_bot.hybrid_command(name="notices", aliases=['n', 'notice', 'news'])
 async def send_news(ctx: commands.Context):
@@ -88,6 +95,7 @@ async def send_news(ctx: commands.Context):
     date, title, link = get_notices()
     await send_notice(date, title, link, context=ctx)
 
+
 @news_bot.hybrid_command(name='ping')
 async def latency(ctx):
     ping = round(news_bot.latency * 1000)
@@ -95,23 +103,29 @@ async def latency(ctx):
     return await ctx.send(f"**Ping: {ping} ms**")
 
 
-@tasks.loop(seconds=600, reconnect=True)
+@tasks.loop(seconds=REFRESH_INTERVAL, reconnect=True)
 async def send_auto_update():
     date, title, link = get_notices()
     await send_notice(date, title, link)
 
 
+@send_auto_update.error
+async def update_error(err):
+    await news_bot.owner.send(f"{err.__class__.__name__}: {str(err)}")
+    raise err
+
+
 @news_bot.command()
 @commands.is_owner()
 async def start(ctx):
-    await ctx.send("Task started successfully!")
     send_auto_update.start()
+    await ctx.send("Task started successfully!")
 
 @news_bot.command()
 @commands.is_owner()
 async def stop(ctx):
-    await ctx.send("Task stopped successfully!")
     send_auto_update.stop()
+    await ctx.send("Task stopped successfully!")
 
 
 @news_bot.command(name='x:eval', aliases=['x:evaluate', "x:ev"])
