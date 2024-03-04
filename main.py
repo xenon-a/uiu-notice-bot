@@ -2,7 +2,7 @@ import discord
 import os
 import io
 import contextlib
-
+# TODO: Set uptime viewer in ping command
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from time import time
@@ -22,11 +22,11 @@ class UIUNoticeBot(commands.AutoShardedBot):
         self.start_time = time()
         self.update_channel = None
         self.owner = None
-        self.last_notice_title = None
 
         super(UIUNoticeBot, self).__init__(
             command_prefix="-",
             intents=INTENTS,
+            allowed_mentions=discord.AllowedMentions(everyone=True),
             help_command=None,
             strip_after_prefix=True,
             case_insensitive=True,
@@ -52,40 +52,53 @@ class UIUNoticeBot(commands.AutoShardedBot):
             raise err
 
 
-news_bot = UIUNoticeBot()
+notice_bot = UIUNoticeBot()
 
 
 async def send_notice(date, title, link, context=None):
-    context = context or news_bot.update_channel
-    if not isinstance(context, commands.Context) and title==news_bot.last_notice_title:
-        return None
-    news_bot.last_notice_title = title
+    context = context or notice_bot.update_channel
+    with open("last_notice_title.txt", "r") as title_file:
+        last_notice_title = title_file.read()
+    mention = str()
+    if not isinstance(context, commands.Context):
+        if title==last_notice_title:
+            return None
+        else:
+            mention = "@everyone"
+    else:
+        mention = context.author.mention
+    with open("last_notice_title.txt", "w") as title_file:
+        title_file.write(title)
     emb = discord.Embed(
         title="New Notice",
-        description=f"**Notice date:** `{date}`\n\n**{title}**\n",
+        description=f"{mention} \n\nDate: `{date}`\n\nTitle: **{title}**\n",
         color=discord.Colour.random(),
         timestamp=discord.utils.utcnow()
     )
     emb.set_thumbnail(url="https://uiu.ac.bd/wp-content/uploads/2023/10/header-logo.png")
-    emb.set_footer(text=news_bot.user.name)
+    emb.set_footer(text=notice_bot.user.name)
 	
     view = discord.ui.View(timeout=None)
     view.add_item(
-		discord.ui.Button(label="Read more", url=link)
+		discord.ui.Button(label="Read Notice", url=link)
     )
 
     return await context.send(embed=emb, view=view)
 
 
-@news_bot.listen()
+@notice_bot.listen()
 async def on_ready():
-    await news_bot.tree.sync()
-    news_bot.owner = await news_bot.fetch_user(425590285943439362)
-    await news_bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="UIU", type=discord.ActivityType.listening))
-    print("Logged in as {0.name} | {0.id}".format(news_bot.user))
+    await notice_bot.tree.sync()
+    notice_bot.owner = await notice_bot.fetch_user(425590285943439362)
+    if not send_auto_update.is_running():
+        print("Starting Task.")
+        send_auto_update.start()
+        print("Task started")
+    await notice_bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="UIU Notices", type=discord.ActivityType.listening))
+    print("Logged in as {0.name} | {0.id}".format(notice_bot.user))
 
 
-@news_bot.hybrid_command(name="notices", aliases=['n', 'notice', 'news'])
+@notice_bot.hybrid_command(name="notices", aliases=['n', 'notice', 'news'])
 async def send_news(ctx: commands.Context):
     """Get the latest notice manually in this channel"""
     if ctx.interaction:
@@ -96,11 +109,14 @@ async def send_news(ctx: commands.Context):
     await send_notice(date, title, link, context=ctx)
 
 
-@news_bot.hybrid_command(name='ping')
+@notice_bot.hybrid_command(name='ping')
 async def latency(ctx):
-    ping = round(news_bot.latency * 1000)
+    ping = round(notice_bot.latency * 1000)
+    uptime = round(time() - notice_bot.start_time)
+    mins, secs = divmod(uptime, 60)
+    hrs, mins = divmod(mins, 60)
 
-    return await ctx.send(f"**Ping: {ping} ms**")
+    return await ctx.send(f"Ping: **{ping} ms**\nUptime: **{hrs} hours {mins} minutes {secs} seconds**")
 
 
 @tasks.loop(seconds=REFRESH_INTERVAL, reconnect=True)
@@ -110,25 +126,29 @@ async def send_auto_update():
 
 
 @send_auto_update.error
-async def update_error(err):
-    await news_bot.owner.send(f"{err.__class__.__name__}: {str(err)}")
+async def send_update_error(err):
+    await notice_bot.owner.send(f"{err.__class__.__name__}: {str(err)}")
     raise err
 
 
-@news_bot.command()
+@notice_bot.command()
 @commands.is_owner()
 async def start(ctx):
+    if send_auto_update.is_running():
+        return await ctx.send("The task is already running!")
     send_auto_update.start()
     await ctx.send("Task started successfully!")
 
-@news_bot.command()
+@notice_bot.command()
 @commands.is_owner()
 async def stop(ctx):
+    if not send_auto_update.is_running():
+        return await ctx.send("The task is not running!")
     send_auto_update.stop()
     await ctx.send("Task stopped successfully!")
 
 
-@news_bot.command(name='x:eval', aliases=['x:evaluate', "x:ev"])
+@notice_bot.command(name='x:eval', aliases=['x:evaluate', "x:ev"])
 @commands.guild_only()
 @commands.is_owner()
 async def x_evaluate(ctx, *, cmd):
@@ -145,7 +165,7 @@ async def x_evaluate(ctx, *, cmd):
         return await ctx.send(embed=ev_emb)
 
 
-@news_bot.command(name="x:exec", aliases=["x:execute", "x:exc"])
+@notice_bot.command(name="x:exec", aliases=["x:execute", "x:exc"])
 @commands.guild_only()
 @commands.is_owner()
 async def x_execute(ctx, *, cmd: str):
@@ -156,7 +176,7 @@ async def x_execute(ctx, *, cmd: str):
     local_vars = {
         'discord': discord,
         'commands': commands,
-        'client': news_bot,
+        'client': notice_bot,
         'ctx': ctx
     }
     no_error = True
@@ -172,10 +192,12 @@ async def x_execute(ctx, *, cmd: str):
     finally:
         eval_emb = discord.Embed(title="Code Execution", description=result,
                                     color=discord.Color.green() if no_error else discord.Color.dark_red())
-        eval_emb.set_footer(text=str(news_bot.user.name))
+        eval_emb.set_footer(text=str(notice_bot.user.name))
         eval_emb.timestamp = discord.utils.utcnow()
         await ctx.send(embed=eval_emb)
 
 
 if __name__=="__main__":
-	news_bot.run(TOKEN)
+    if not os.path.exists("last_notice_title.txt"):
+        open("last_notice_title.txt", "x").close()
+    notice_bot.run(TOKEN)
